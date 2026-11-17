@@ -6,6 +6,17 @@ An interactive demonstration showing how **GKE Standard (Dataplane V2)** in **Si
 
 ---
 
+## Why Job Queueing Is Needed on Kubernetes
+
+Even in cloud clusters with autoscaling, GPUs are finite, quota-bound, and expensive. As explained in the official Kubernetes blog post **[Introducing Kueue](https://kubernetes.io/blog/2022/10/04/introducing-kueue/)**, plain Kubernetes falls short when multiple workloads or teams compete for batch compute:
+
+- **Control-plane & autoscaler churn:** When a standard `batch/v1` `Job` is created, `job-controller` immediately creates Pods and `kube-scheduler` continuously retries unschedulable `Pending` Pods—which can overload the control plane at scale or trigger runaway GPU node autoscaling.
+- **`ResourceQuota` rejects instead of queueing:** Native `ResourceQuota` blocks Pod creation once a limit is reached rather than holding jobs in a queue until capacity frees up.
+- **No job-level ordering or flexible placement:** Plain Kubernetes schedules individual Pods rather than Jobs as a unit, with no built-in job queue ordering, fair-sharing across namespaces, or dynamic placement across heterogeneous hardware (On-Demand vs. Spot, `L4` vs. `T4`).
+- **Kubernetes-native without replacing `kube-scheduler`:** Unlike custom batch schedulers that replace `kube-scheduler` or fragment Job APIs, **Kueue** works alongside standard Kubernetes components using native `.spec.suspend` (holding Jobs paused with zero Pods until quota is free) and mutable scheduling directives (injecting `nodeSelector` / tolerations via `ResourceFlavor` on admission).
+
+---
+
 ## Key Highlights Demonstrated
 
 1. **Custom Compute Class (`k8s/01-compute-class.yaml`)**:
