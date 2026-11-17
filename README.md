@@ -14,6 +14,7 @@ Even in cloud clusters with autoscaling, GPUs are finite, quota-bound, and expen
 - **`ResourceQuota` rejects instead of queueing:** Native `ResourceQuota` blocks Pod creation once a limit is reached rather than holding jobs in a waiting line until capacity frees up.
 - **No job-level ordering or flexible placement:** Plain Kubernetes schedules individual Pods rather than Jobs as a unit, with no built-in job queue ordering, fair-sharing across namespaces, or dynamic placement across heterogeneous hardware (On-Demand vs. Spot, `L4` vs. `T4`).
 - **Kubernetes-native without replacing `kube-scheduler`:** Unlike custom batch schedulers that replace `kube-scheduler` or fragment Job APIs, **Kueue** works alongside standard Kubernetes components using native `.spec.suspend` (holding Jobs paused with zero Pods until quota is free) and mutable scheduling directives (injecting `nodeSelector` / tolerations via `ResourceFlavor` on admission).
+- **Proven at production scale:** In a **[Google Cloud case study](https://cloud.google.com/blog/products/containers-kubernetes/ai21-trains-its-models-on-ai-hypercomputer)**, **AI21 Labs** used Kueue on GKE (AI Hypercomputer) to replace manual GPU chat negotiations—achieving an **83% reduction in time-to-start** for high-priority AI workloads and cutting cluster fragmentation from 15% to 8%.
 
 ---
 
