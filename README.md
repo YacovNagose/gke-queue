@@ -2,6 +2,8 @@
 
 An interactive demonstration showing how **GKE Standard (Dataplane V2)** in **Singapore (`asia-southeast1`)**, **Kueue**, **Custom Compute Classes (`ComputeClass`)**, and **GPU Time-Sharing (`maxSharedClientsPerGPU: 4`)** enable cost-efficient small-model training on cheap GPUs (`NVIDIA L4` & `Tesla T4`) while prioritizing critical jobs over batch jobs without wasting in-progress training runs.
 
+![GPU Queueing and Time-Sharing on Kubernetes](docs/architecture.jpg)
+
 ---
 
 ## Key Highlights Demonstrated
