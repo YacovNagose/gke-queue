@@ -72,7 +72,7 @@
 
   function getSelectedDuration() {
     const sel = document.getElementById("job-duration-select");
-    return sel ? parseInt(sel.value, 10) || 45 : 45;
+    return sel ? parseInt(sel.value, 10) || 25 : 25;
   }
 
   function openJobOutput(jobName) {

@@ -88,13 +88,13 @@ rate_limiter = RateLimiter()
 
 class SubmitJobRequest(BaseModel):
     job_type: Literal["critical-retrain", "batch-sweep"]
-    duration_seconds: int = Field(default=45, ge=15, le=180)
+    duration_seconds: int = Field(default=25, ge=15, le=180)
 
 
 class BurstJobsRequest(BaseModel):
     job_type: Literal["critical-retrain", "batch-sweep"] = "batch-sweep"
     count: int = Field(default=6, ge=2, le=10)
-    duration_seconds: int = Field(default=45, ge=15, le=180)
+    duration_seconds: int = Field(default=25, ge=15, le=180)
 
 
 class ModeSwitchRequest(BaseModel):
@@ -197,7 +197,7 @@ JOB_CATALOG = {
 TRAINER_IMAGE = "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime"
 TRAIN_SCRIPT = """
 import os, time, torch
-dur = int(os.environ.get("DURATION_SECONDS", "45"))
+dur = int(os.environ.get("DURATION_SECONDS", "25"))
 print(f"[JOB] {os.environ.get('JOB_TITLE')} ({os.environ.get('JOB_NAME')})", flush=True)
 print(f"[PRIORITY] {os.environ.get('PRIORITY_LABEL')}", flush=True)
 dev = "cuda" if torch.cuda.is_available() else "cpu"
@@ -925,7 +925,7 @@ class DemoEngine:
                     jtype = "batch-sweep"
                 meta = JOB_CATALOG[jtype]
                 created_ts = item.metadata.creation_timestamp.timestamp() if item.metadata.creation_timestamp else now
-                dur = int(annotations.get("demo.gke.io/duration-seconds", "45"))
+                dur = int(annotations.get("demo.gke.io/duration-seconds", "25"))
                 jumped = int(annotations.get("demo.gke.io/jumped-count", "0"))
 
                 job_dict: Dict[str, object] = {

@@ -13,7 +13,7 @@ metadata:
     demo.gke.io/job-type: batch-sweep
     demo.gke.io/priority-tier: low
   annotations:
-    demo.gke.io/duration-seconds: "45"
+    demo.gke.io/duration-seconds: "25"
 spec:
   suspend: true
   parallelism: 1
@@ -35,7 +35,7 @@ spec:
           args:
             - |
               import os, time, torch
-              dur = int(os.environ.get("DURATION_SECONDS", "45"))
+              dur = int(os.environ.get("DURATION_SECONDS", "25"))
               print(f"[JOB] {os.environ.get('JOB_TITLE')}", flush=True)
               dev = "cuda" if torch.cuda.is_available() else "cpu"
               print(f"[GPU] {torch.cuda.get_device_name(0) if dev == 'cuda' else 'not found, using CPU'}", flush=True)
@@ -68,7 +68,7 @@ spec:
             - name: JOB_TITLE
               value: "Research Training Run (Small Model) - low-priority (100)"
             - name: DURATION_SECONDS
-              value: "45"
+              value: "25"
           resources:
             requests:
               cpu: "500m"
@@ -90,7 +90,7 @@ metadata:
     demo.gke.io/job-type: critical-retrain
     demo.gke.io/priority-tier: critical
   annotations:
-    demo.gke.io/duration-seconds: "45"
+    demo.gke.io/duration-seconds: "25"
 spec:
   suspend: true
   parallelism: 1
@@ -112,7 +112,7 @@ spec:
           args:
             - |
               import os, time, torch
-              dur = int(os.environ.get("DURATION_SECONDS", "45"))
+              dur = int(os.environ.get("DURATION_SECONDS", "25"))
               print(f"[JOB] {os.environ.get('JOB_TITLE')}", flush=True)
               dev = "cuda" if torch.cuda.is_available() else "cpu"
               print(f"[GPU] {torch.cuda.get_device_name(0) if dev == 'cuda' else 'not found, using CPU'}", flush=True)
@@ -145,7 +145,7 @@ spec:
             - name: JOB_TITLE
               value: "Urgent Image Model Retraining - critical-priority (1000)"
             - name: DURATION_SECONDS
-              value: "45"
+              value: "25"
           resources:
             requests:
               cpu: "500m"
