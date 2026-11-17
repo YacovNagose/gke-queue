@@ -14,7 +14,6 @@ Even in cloud clusters with autoscaling, GPUs are finite, quota-bound, and expen
 - **`ResourceQuota` rejects instead of queueing:** Native `ResourceQuota` blocks Pod creation once a limit is reached rather than holding jobs in a waiting line until capacity frees up.
 - **No job-level ordering or flexible placement:** Plain Kubernetes schedules individual Pods rather than Jobs as a unit, with no built-in job queue ordering, fair-sharing across namespaces, or dynamic placement across heterogeneous hardware (On-Demand vs. Spot, `L4` vs. `T4`).
 - **Kubernetes-native without replacing `kube-scheduler`:** Unlike custom batch schedulers that replace `kube-scheduler` or fragment Job APIs, **Kueue** works alongside standard Kubernetes components using native `.spec.suspend` (holding Jobs paused with zero Pods until quota is free) and mutable scheduling directives (injecting `nodeSelector` / tolerations via `ResourceFlavor` on admission).
-- **Proven at production scale:** In a **[Google Cloud case study](https://cloud.google.com/blog/products/containers-kubernetes/ai21-trains-its-models-on-ai-hypercomputer)**, **AI21 Labs** used Kueue on GKE (AI Hypercomputer) to replace manual GPU chat negotiations—achieving an **83% reduction in time-to-start** for high-priority AI workloads and cutting cluster fragmentation from 15% to 8%.
 
 ---
 
@@ -72,7 +71,7 @@ make setup-gke
 ```
 
 [`scripts/setup-gke-cluster.sh`](scripts/setup-gke-cluster.sh) automatically:
-1. Enables `container.googleapis.com` and `compute.googleapis.com`, and creates (if missing) VPC `gke-kueue-vpc` and subnet `gke-singapore` (`10.20.0.0/22`).
+1. Enables `container.googleapis.com` and `compute.googleapis.com`, and creates (if missing) VPC `gke-kueue-vpc` and subnet `gke-kueue-subnet` (`10.20.0.0/22`).
 2. Creates a GKE Standard cluster (`gke-kueue-gpu-demo`) on the `rapid` channel with `--enable-dataplane-v2`.
 3. Installs **Kueue** and waits for `kueue-controller-manager` to become available.
 4. Applies [`k8s/01-compute-class.yaml`](k8s/01-compute-class.yaml) and [`k8s/02-kueue-config.yaml`](k8s/02-kueue-config.yaml).
@@ -111,7 +110,7 @@ All scripts respect environment variables so you can customize the region, clust
 | `REGION` | `asia-southeast1` | GKE cluster & Artifact Registry region |
 | `CLUSTER_NAME` | `gke-kueue-gpu-demo` | GKE Standard cluster name |
 | `NETWORK_NAME` | `gke-kueue-vpc` | VPC network name (created if missing) |
-| `SUBNET_NAME` | `gke-singapore` | Subnet name (created if missing) |
+| `SUBNET_NAME` | `gke-kueue-subnet` | Subnet name (created if missing) |
 | `SUBNET_RANGE` | `10.20.0.0/22` | Primary CIDR range for the subnet |
 | `KUEUE_VERSION` | `v0.10.1` | Upstream Kueue release manifest version |
 | `PORT` | `8000` | Local bind port for `make run-ui` / `make port-forward-ui` |

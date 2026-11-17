@@ -10,7 +10,7 @@ PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project 2>/dev/null || true)
 CLUSTER_NAME="${CLUSTER_NAME:-gke-kueue-gpu-demo}"
 REGION="${REGION:-asia-southeast1}"
 NETWORK_NAME="${NETWORK_NAME:-gke-kueue-vpc}"
-SUBNET_NAME="${SUBNET_NAME:-gke-singapore}"
+SUBNET_NAME="${SUBNET_NAME:-gke-kueue-subnet}"
 SUBNET_RANGE="${SUBNET_RANGE:-10.20.0.0/22}"
 RELEASE_CHANNEL="${RELEASE_CHANNEL:-rapid}"
 KUEUE_VERSION="${KUEUE_VERSION:-v0.10.1}"
@@ -28,14 +28,14 @@ echo " Provisioning GKE Standard Cluster for Kueue + GPU Sharing Demo"
 echo "------------------------------------------------------------------"
 echo " Project ID      : ${PROJECT_ID}"
 echo " Cluster Name    : ${CLUSTER_NAME}"
-echo " Region          : ${REGION} (Singapore)"
+echo " Region          : ${REGION}"
 echo " VPC / Subnet    : ${NETWORK_NAME} / ${SUBNET_NAME} (${SUBNET_RANGE})"
 echo " Release Channel : ${RELEASE_CHANNEL} (GKE 1.35.2+ for priorityScore & gpuSharing)"
 echo " Network         : Dataplane V2 (--enable-dataplane-v2)"
 echo "=================================================================="
 
-# 1. Enable required Google Cloud APIs & ensure VPC subnet exists in Singapore
-echo "[1/5] Ensuring APIs and Singapore VPC subnet '${SUBNET_NAME}' exist..."
+# 1. Enable required Google Cloud APIs & ensure VPC subnet exists in target region
+echo "[1/5] Ensuring APIs and VPC subnet '${SUBNET_NAME}' exist..."
 gcloud services enable container.googleapis.com compute.googleapis.com \
   --project="${PROJECT_ID}"
 
@@ -45,14 +45,20 @@ if ! gcloud compute networks describe "${NETWORK_NAME}" --project="${PROJECT_ID}
     --subnet-mode=custom
 fi
 
-if ! gcloud compute networks subnets describe "${SUBNET_NAME}" \
-  --region="${REGION}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
+EXISTING_SUBNET_NET="$(gcloud compute networks subnets describe "${SUBNET_NAME}" \
+  --region="${REGION}" --project="${PROJECT_ID}" --format='value(network)' 2>/dev/null || true)"
+
+if [[ -z "${EXISTING_SUBNET_NET}" ]]; then
   gcloud compute networks subnets create "${SUBNET_NAME}" \
     --project="${PROJECT_ID}" \
     --network="${NETWORK_NAME}" \
     --region="${REGION}" \
     --range="${SUBNET_RANGE}" \
     --enable-private-ip-google-access
+elif [[ "${EXISTING_SUBNET_NET}" != *"/${NETWORK_NAME}" ]]; then
+  echo "ERROR: Subnet '${SUBNET_NAME}' in ${REGION} belongs to '${EXISTING_SUBNET_NET}', not '${NETWORK_NAME}'."
+  echo "       Export a distinct SUBNET_NAME and retry."
+  exit 1
 fi
 
 # 2. Create GKE Standard cluster with Dataplane V2 in Singapore (asia-southeast1)
