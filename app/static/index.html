@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta
+    name="description"
+    content="Interactive GKE Standard, Kueue non-preemptive priority scheduling, Custom ComputeClass (L4/T4 On-Demand and Spot fallback), and 4x GPU time-sharing demo."
+  />
+  <meta name="color-scheme" content="dark light" />
+  <title>GPU Job Scheduler Demo</title>
+  <!-- Google Fonts serves different CSS per browser, so an SRI hash can't be pinned here.
+       The CSP limits styles and fonts to these two origins. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&amp;family=Instrument+Sans:wght@400..700&amp;family=JetBrains+Mono:wght@400..700&amp;display=swap"
+  />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="/static/theme.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-brand">
+      <div>
+        <h1 class="brand-title">GPU Job Scheduler Demo</h1>
+        <p class="brand-subtitle">
+          Urgent jobs skip the line, and jobs that are already running keep going.
+        </p>
+      </div>
+      <nav class="page-nav" aria-label="Demo pages">
+        <a href="/slides" class="page-nav-link" id="nav-intro-slides">Intro slides</a>
+        <a href="/" class="page-nav-link active" id="nav-live-demo" aria-current="page">Live demo</a>
+        <a href="/resources" class="page-nav-link" id="nav-queue-resources">Queue resources</a>
+      </nav>
+    </div>
+
+    <div class="topbar-actions">
+      <div class="mode-pill" id="mode-indicator">
+        <span class="status-dot" id="mode-dot"></span>
+        <span id="mode-label">Simulation</span>
+      </div>
+      <button type="button" class="btn btn-ghost" id="btn-toggle-mode">
+        Switch to live cluster
+      </button>
+      <button type="button" class="btn btn-ghost" id="btn-theme-toggle">Light theme</button>
+      <button type="button" class="btn btn-ghost" id="btn-view-manifests">
+        View config files
+      </button>
+      <button type="button" class="btn btn-danger-outline" id="btn-reset-demo">
+        Reset demo
+      </button>
+    </div>
+  </header>
+
+  <section class="demo-walkthrough-bar" aria-label="How to run the demo">
+    <div class="walkthrough-step">
+      <span class="step-tag">1</span>
+      <span>Send 6 regular jobs. The GPU fills up and 2 jobs wait.</span>
+    </div>
+    <div class="walkthrough-divider">→</div>
+    <div class="walkthrough-step">
+      <span class="step-tag step-tag-critical">2</span>
+      <span>Send an urgent job. It moves to the front of the line.</span>
+    </div>
+    <div class="walkthrough-divider">→</div>
+    <div class="walkthrough-step">
+      <span class="step-tag step-tag-emerald">3</span>
+      <span>When a seat frees up, the urgent job runs next.</span>
+    </div>
+  </section>
+
+  <section class="arch-section" aria-label="System architecture diagram">
+    <details class="arch-details" id="arch-diagram-details" open>
+      <summary class="arch-summary" id="arch-diagram-summary">
+        <div class="arch-summary-left">
+          <span class="arch-chevron" aria-hidden="true">▸</span>
+          <span class="arch-summary-title">Architecture &amp; scheduling flow</span>
+          <span class="arch-summary-sub">
+            PyTorch Jobs → Kueue (non-preemptive priority) → Custom ComputeClass (L4/T4) → 4× Time-Shared GPU
+          </span>
+        </div>
+        <div class="arch-summary-right">
+          <span class="arch-hint-pill" id="arch-live-summary-pill">0 / 4 seats active · 0 waiting</span>
+          <span class="arch-hint-pill">Click any stage for YAML / logs</span>
+        </div>
+      </summary>
+
+      <div class="arch-canvas-wrap">
+        <svg
+          class="arch-svg"
+          id="arch-svg"
+          viewBox="0 0 1272 258"
+          role="img"
+          aria-labelledby="arch-svg-title arch-svg-desc"
+        >
+          <title id="arch-svg-title">GKE + Kueue + Custom ComputeClass GPU Time-Sharing Architecture</title>
+          <desc id="arch-svg-desc">
+            Urgent (priority 1000) and Regular (priority 100) PyTorch jobs enter Kueue LocalQueue training-queue and
+            ClusterQueue gpu-cluster-queue with preemption set to Never. Admitted workloads trigger GKE ComputeClass
+            cheap-gpu-timeshared (On-Demand L4/T4 score 20, Spot L4/T4 backup score 10) and share 1 physical GPU across
+            up to 4 concurrent time-shared seats.
+          </desc>
+
+          <defs>
+            <marker id="arch-arrow-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" class="arch-arrow-amber" />
+            </marker>
+            <marker id="arch-arrow-cyan" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" class="arch-arrow-cyan" />
+            </marker>
+            <marker id="arch-arrow-emerald" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" class="arch-arrow-emerald" />
+            </marker>
+            <marker id="arch-arrow-muted" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+              <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" class="arch-arrow-muted" />
+            </marker>
+          </defs>
+
+          <!-- GKE Cluster Boundary -->
+          <rect x="296" y="8" width="968" height="242" rx="10" class="arch-cluster-frame" />
+          <rect x="310" y="15" width="398" height="20" rx="4" class="arch-cluster-pill" />
+          <text x="320" y="29" class="arch-cluster-label">
+            GKE STANDARD CLUSTER · asia-southeast1 · Dataplane V2
+          </text>
+
+          <!-- STAGE 1: WORKLOADS -->
+          <g
+            class="arch-stage-group"
+            id="arch-stage-jobs"
+            tabindex="0"
+            role="button"
+            aria-label="Stage 1: Workloads. Click to view 03-job-templates.yaml"
+          >
+            <rect x="8" y="42" width="234" height="200" rx="8" class="arch-stage-box" />
+            <text x="22" y="62" class="arch-stage-title">1. WORKLOADS</text>
+            <text x="228" y="62" text-anchor="end" class="arch-stage-meta">Jobs YAML ↗</text>
+            <line x1="20" y1="71" x2="230" y2="71" class="arch-divider" />
+
+            <!-- Urgent Job Card -->
+            <rect x="20" y="80" width="210" height="72" rx="6" class="arch-subcard arch-subcard-amber" />
+            <rect x="20" y="80" width="4" height="72" rx="2" class="arch-bar-amber" />
+            <text x="34" y="100" class="arch-item-title arch-fill-amber">Urgent · Priority 1000</text>
+            <text x="34" y="118" class="arch-code">critical-priority</text>
+            <text x="34" y="136" class="arch-muted">1 GPU slice · Skips waiting line</text>
+
+            <!-- Regular Job Card -->
+            <rect x="20" y="160" width="210" height="72" rx="6" class="arch-subcard arch-subcard-cyan" />
+            <rect x="20" y="160" width="4" height="72" rx="2" class="arch-bar-cyan" />
+            <text x="34" y="180" class="arch-item-title arch-fill-cyan">Regular · Priority 100</text>
+            <text x="34" y="198" class="arch-code">low-priority</text>
+            <text x="34" y="216" class="arch-muted">1 GPU slice · Research sweep</text>
+          </g>
+
+          <!-- WIRES: STAGE 1 -> STAGE 2 -->
+          <path id="arch-wire-urgent" d="M 242 116 L 300 116" class="arch-wire arch-wire-amber" marker-end="url(#arch-arrow-amber)" />
+          <text x="271" y="108" text-anchor="middle" class="arch-wire-label arch-fill-amber">jump #1</text>
+
+          <path id="arch-wire-regular" d="M 242 196 C 272 196, 272 138, 300 138" class="arch-wire arch-wire-cyan" marker-end="url(#arch-arrow-cyan)" />
+          <text x="268" y="211" text-anchor="middle" class="arch-wire-label arch-fill-cyan">enqueue</text>
+
+          <!-- STAGE 2: KUEUE SCHEDULER -->
+          <g
+            class="arch-stage-group"
+            id="arch-stage-kueue"
+            tabindex="0"
+            role="button"
+            aria-label="Stage 2: Kueue Scheduler. Click to view 02-kueue-config.yaml"
+          >
+            <rect x="304" y="42" width="294" height="200" rx="8" class="arch-stage-box" />
+            <text x="318" y="62" class="arch-stage-title">2. KUEUE SCHEDULER</text>
+            <text x="584" y="62" text-anchor="end" class="arch-stage-meta">Kueue YAML ↗</text>
+            <line x1="316" y1="71" x2="586" y2="71" class="arch-divider" />
+
+            <!-- Queue Ordering Subcard -->
+            <rect id="arch-kueue-queue-card" x="316" y="80" width="270" height="72" rx="6" class="arch-subcard" />
+            <text x="328" y="99" class="arch-code arch-fill-primary">training-queue → gpu-cluster-queue</text>
+            <text id="arch-queue-live" x="328" y="119" class="arch-item-title arch-fill-cyan">Waiting line: 0 jobs</text>
+            <text x="328" y="137" class="arch-muted">Urgent (1000) jumps ahead of Regular (100)</text>
+
+            <!-- Preemption & Quota Subcard -->
+            <rect x="316" y="160" width="270" height="72" rx="6" class="arch-subcard" />
+            <text x="328" y="180" class="arch-item-title arch-fill-emerald">preemption: Never (running safe)</text>
+            <text id="arch-quota-live" x="328" y="199" class="arch-code arch-fill-primary">Quota in use: 0 / 4 GPU slices</text>
+            <text x="328" y="217" class="arch-muted">Flavor: cheap-gpu-flavor (16 vCPU · 64Gi)</text>
+          </g>
+
+          <!-- WIRE: STAGE 2 -> STAGE 3 -->
+          <path id="arch-wire-admit" d="M 598 142 L 650 142" class="arch-wire arch-wire-emerald" marker-end="url(#arch-arrow-emerald)" />
+          <text x="624" y="133" text-anchor="middle" class="arch-wire-label">admit</text>
+          <text x="624" y="156" text-anchor="middle" class="arch-wire-label">selector</text>
+
+          <!-- STAGE 3: COMPUTECLASS -->
+          <g
+            class="arch-stage-group"
+            id="arch-stage-ccc"
+            tabindex="0"
+            role="button"
+            aria-label="Stage 3: Custom ComputeClass. Click to view 01-compute-class.yaml"
+          >
+            <rect x="654" y="42" width="290" height="200" rx="8" class="arch-stage-box" />
+            <text x="668" y="62" class="arch-stage-title">3. COMPUTECLASS</text>
+            <text x="930" y="62" text-anchor="end" class="arch-stage-meta">Class YAML ↗</text>
+            <line x1="666" y1="71" x2="932" y2="71" class="arch-divider" />
+
+            <!-- Tier 1: On-Demand -->
+            <rect id="arch-tier-od" x="666" y="80" width="266" height="60" rx="6" class="arch-subcard arch-tier-active" />
+            <text x="678" y="99" class="arch-item-title">Tier 1 · On-Demand GPU</text>
+            <text x="920" y="99" text-anchor="end" class="arch-score-text">score 20</text>
+            <text x="678" y="117" class="arch-code">nvidia-l4 / tesla-t4 · spot: false</text>
+            <text id="arch-tier-od-state" x="678" y="133" class="arch-muted">Evaluated together · Active tier</text>
+
+            <!-- Stockout Fallback Arrow -->
+            <path d="M 799 140 L 799 168" class="arch-wire-fallback" marker-end="url(#arch-arrow-muted)" />
+            <text x="808" y="158" class="arch-wire-label">stockout fallback</text>
+
+            <!-- Tier 2: Spot Fallback -->
+            <rect id="arch-tier-spot" x="666" y="172" width="266" height="60" rx="6" class="arch-subcard" />
+            <text x="678" y="191" class="arch-item-title">Tier 2 · Spot VM Backup</text>
+            <text x="920" y="191" text-anchor="end" class="arch-score-text">score 10</text>
+            <text x="678" y="209" class="arch-code">nvidia-l4 / tesla-t4 · spot: true</text>
+            <text id="arch-tier-spot-state" x="678" y="225" class="arch-muted">Fast backup capacity if OD full</text>
+          </g>
+
+          <!-- WIRE: STAGE 3 -> STAGE 4 -->
+          <path id="arch-wire-gpu" d="M 944 142 L 994 142" class="arch-wire arch-wire-emerald" marker-end="url(#arch-arrow-emerald)" />
+          <text x="969" y="133" text-anchor="middle" class="arch-wire-label">1 GPU</text>
+          <text x="969" y="156" text-anchor="middle" class="arch-wire-label">4 seats</text>
+
+          <!-- STAGE 4: SHARED PHYSICAL GPU NODE -->
+          <g
+            class="arch-stage-group"
+            id="arch-stage-gpu"
+            tabindex="0"
+            role="button"
+            aria-label="Stage 4: Time-Shared GPU Node. Click to inspect machine and job output"
+          >
+            <rect x="998" y="42" width="254" height="200" rx="8" class="arch-stage-box arch-stage-gpu-box" />
+            <text x="1012" y="62" class="arch-stage-title">4. SHARED GPU</text>
+            <text id="arch-gpu-chip" x="1238" y="62" text-anchor="end" class="arch-stage-meta arch-fill-emerald">NVIDIA L4</text>
+            <line x1="1010" y1="71" x2="1240" y2="71" class="arch-divider" />
+
+            <!-- 2x2 Time-Shared GPU Seats -->
+            <rect id="arch-seat-1" x="1010" y="80" width="111" height="50" rx="5" class="arch-seat-rect" />
+            <text x="1020" y="99" class="arch-seat-id">Seat 1</text>
+            <text id="arch-seat-1-label" x="1020" y="118" class="arch-seat-state">Free</text>
+
+            <rect id="arch-seat-2" x="1129" y="80" width="111" height="50" rx="5" class="arch-seat-rect" />
+            <text x="1139" y="99" class="arch-seat-id">Seat 2</text>
+            <text id="arch-seat-2-label" x="1139" y="118" class="arch-seat-state">Free</text>
+
+            <rect id="arch-seat-3" x="1010" y="138" width="111" height="50" rx="5" class="arch-seat-rect" />
+            <text x="1020" y="157" class="arch-seat-id">Seat 3</text>
+            <text id="arch-seat-3-label" x="1020" y="176" class="arch-seat-state">Free</text>
+
+            <rect id="arch-seat-4" x="1129" y="138" width="111" height="50" rx="5" class="arch-seat-rect" />
+            <text x="1139" y="157" class="arch-seat-id">Seat 4</text>
+            <text id="arch-seat-4-label" x="1139" y="176" class="arch-seat-state">Free</text>
+
+            <!-- Time-Sharing & Telemetry Footer -->
+            <rect x="1010" y="196" width="230" height="36" rx="5" class="arch-subcard" />
+            <text x="1020" y="212" class="arch-code arch-fill-emerald">TIME_SHARING · 4 clients/GPU</text>
+            <text id="arch-gpu-util" x="1020" y="226" class="arch-muted">nvidia-smi: 0% utilization · Idle</text>
+          </g>
+        </svg>
+      </div>
+    </details>
+  </section>
+
+  <div id="toast-banner" class="toast-banner hidden" role="status" aria-live="polite"></div>
+
+  <main class="console-grid">
+    <!-- COLUMN 1: SEND JOBS -->
+    <section class="panel" aria-labelledby="dispatch-heading">
+      <div class="panel-header">
+        <h2 id="dispatch-heading" class="panel-title">Send jobs</h2>
+        <div class="duration-control">
+          <label for="job-duration-select" class="duration-label">Each job runs for</label>
+          <select id="job-duration-select" class="select-input">
+            <option value="25">25 seconds</option>
+            <option value="45" selected>45 seconds</option>
+            <option value="75">75 seconds</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="job-trigger-card job-trigger-critical">
+        <div class="trigger-header">
+          <span class="priority-badge priority-critical">Urgent</span>
+        </div>
+        <h3 class="trigger-title">Image model retraining</h3>
+        <p class="trigger-desc">
+          A production fix. It goes ahead of every regular job that's waiting.
+        </p>
+        <div class="trigger-actions">
+          <button type="button" class="btn btn-critical" id="btn-submit-critical">
+            Send urgent job
+          </button>
+        </div>
+      </div>
+
+      <div class="job-trigger-card job-trigger-low">
+        <div class="trigger-header">
+          <span class="priority-badge priority-low">Regular</span>
+        </div>
+        <h3 class="trigger-title">Research</h3>
+        <p class="trigger-desc">
+          A research training run. It waits its turn and uses the GPU when a seat is free.
+        </p>
+        <div class="trigger-actions trigger-actions-split">
+          <button type="button" class="btn btn-low" id="btn-submit-low">
+            Send 1 job
+          </button>
+          <button type="button" class="btn btn-low-burst" id="btn-burst-low">
+            Send 6 jobs
+          </button>
+        </div>
+      </div>
+
+      <details class="tech-details">
+        <summary>Technical details: which machines GKE picks</summary>
+        <div class="tech-body">
+          <p class="ccc-helper">
+            ComputeClass <code class="mono">cheap-gpu-timeshared</code> tries on-demand L4/T4 first
+            (<code class="mono">priorityScore: 20</code>), then falls back to Spot L4/T4
+            (<code class="mono">priorityScore: 10</code>). In simulation, click a row to switch machines.
+          </p>
+          <div class="ccc-rules-list" id="ccc-rules-container"></div>
+        </div>
+      </details>
+    </section>
+
+    <!-- COLUMN 2: WAITING LINE -->
+    <section class="panel" aria-labelledby="kueue-heading">
+      <div class="panel-header">
+        <h2 id="kueue-heading" class="panel-title">Waiting line</h2>
+      </div>
+
+      <div class="quota-meter-card">
+        <div class="quota-stats-row">
+          <div>
+            <span class="stat-label">GPU seats in use</span>
+            <div class="stat-value" id="quota-usage-text">0 of 4</div>
+          </div>
+          <div class="stat-right">
+            <span class="stat-label">Waiting</span>
+            <div class="stat-value" id="queue-waiting-count">0</div>
+          </div>
+        </div>
+        <div class="quota-bar-track" id="quota-bar-track"></div>
+      </div>
+
+      <p class="info-note">
+        Running jobs are never stopped. Urgent jobs always get the next free seat.
+      </p>
+
+      <div class="queue-list" id="queued-jobs-container"></div>
+
+      <details class="tech-details">
+        <summary>Technical details: scheduler activity log</summary>
+        <div class="tech-body">
+          <p class="ccc-helper">
+            Kueue queue <code class="mono">training-queue</code> → <code class="mono">gpu-cluster-queue</code>,
+            priorities 1000 (urgent) and 100 (regular), preemption off.
+          </p>
+          <div class="events-feed" id="events-container"></div>
+        </div>
+      </details>
+    </section>
+
+    <!-- COLUMN 3: THE GPU -->
+    <section class="panel" aria-labelledby="gpu-heading">
+      <div class="panel-header">
+        <div>
+          <h2 id="gpu-heading" class="panel-title">The GPU</h2>
+          <p class="panel-sub">One GPU, shared by up to 4 jobs at once</p>
+        </div>
+        <span class="emerald-pill" id="active-gpu-pill">NVIDIA L4</span>
+      </div>
+
+      <div class="gpu-usage-card" id="gpu-usage-container"></div>
+
+      <div class="gpu-slots-grid" id="gpu-slots-container"></div>
+
+      <details class="tech-details" id="details-gpu">
+        <summary>Technical details: machine and job output</summary>
+        <div class="tech-body">
+          <div class="node-telemetry-banner" id="node-telemetry-banner">
+            <div class="node-meta-item">
+              <span class="meta-label">Node</span>
+              <span class="meta-val mono" id="node-name-val">-</span>
+            </div>
+            <div class="node-meta-item">
+              <span class="meta-label">Machine / GPU</span>
+              <span class="meta-val mono" id="node-machine-val">-</span>
+            </div>
+            <div class="node-meta-item">
+              <span class="meta-label">ComputeClass rule</span>
+              <span class="meta-val mono" id="node-score-val">-</span>
+            </div>
+          </div>
+          <div class="log-inspector">
+            <div class="log-inspector-header">
+              <span class="queue-section-title" id="log-inspector-title">Job output</span>
+              <span class="mono-tag" id="log-inspector-status">Click a job to see its output</span>
+            </div>
+            <pre class="terminal-output" id="terminal-log-output">Click a job to see its output here.</pre>
+          </div>
+        </div>
+      </details>
+    </section>
+  </main>
+
+  <div class="modal-backdrop hidden" id="manifests-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="modal-title" class="panel-title">Config files</h2>
+        <button type="button" class="btn btn-ghost" id="btn-close-modal">Close</button>
+      </div>
+      <div class="modal-tabs" id="manifest-tabs">
+        <button type="button" class="tab-btn active" data-file="01-compute-class.yaml">Machines (ComputeClass)</button>
+        <button type="button" class="tab-btn" data-file="02-kueue-config.yaml">Queue (Kueue)</button>
+        <button type="button" class="tab-btn" data-file="03-job-templates.yaml">Jobs</button>
+      </div>
+      <pre class="manifest-code-view" id="manifest-code-content">Loading...</pre>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

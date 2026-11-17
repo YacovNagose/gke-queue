@@ -1,0 +1,457 @@
+/* Intro slides (/slides). Builds on the tokens and components in styles.css. */
+
+.slides-body {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.deck {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.deck-stage {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: clamp(1rem, 3vw, 2.5rem) var(--page-pad);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+/* Full screen: hide the top bar so only the slide and its controls remain. */
+html:fullscreen .topbar {
+  display: none;
+}
+
+/* ===== Slide ===== */
+.slide {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1rem, 2.2vw, 1.75rem);
+  width: 100%;
+  max-width: 1180px;
+  animation: rise 0.35s var(--ease) both;
+}
+
+.slide[hidden] {
+  display: none;
+}
+
+.slide-kicker {
+  font-size: clamp(0.9rem, 1.2vw, 1.05rem);
+  font-weight: 700;
+  color: var(--gpu);
+}
+
+.slide-title {
+  max-width: 34ch;
+  text-wrap: balance;
+  font-size: clamp(1.9rem, 3.8vw, 3.3rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+}
+
+.slide-title-xl {
+  max-width: 22ch;
+  font-size: clamp(2.6rem, 6.4vw, 5.4rem);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.slide-lead {
+  max-width: 62ch;
+  font-size: clamp(1.05rem, 1.55vw, 1.4rem);
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.slide-note {
+  max-width: 80ch;
+  font-size: clamp(0.95rem, 1.2vw, 1.1rem);
+  color: var(--text-2);
+}
+
+.slide-note code,
+.card-here code {
+  padding: 0.08em 0.4em;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  color: var(--text);
+}
+
+.slide-link {
+  color: var(--regular);
+  font-weight: 600;
+  text-underline-offset: 0.2em;
+}
+
+.slide-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.btn-primary {
+  min-height: 3rem;
+  padding: 0.7rem 1.4rem;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.btn-primary:hover {
+  filter: brightness(0.92);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ===== Cards ===== */
+.slide-grid {
+  display: grid;
+  gap: clamp(0.75rem, 1.4vw, 1.1rem);
+}
+
+.slide-grid-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.slide-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.slide-card,
+.flow-step,
+.compare-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: clamp(1rem, 1.8vw, 1.5rem);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+}
+
+.slide-card h3,
+.flow-step h3,
+.compare-col h3 {
+  font-size: clamp(1.1rem, 1.7vw, 1.45rem);
+  font-weight: 700;
+}
+
+.slide-card p,
+.flow-step p {
+  font-size: clamp(0.95rem, 1.25vw, 1.12rem);
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.slide-card .card-here {
+  margin-top: auto;
+  padding-top: 0.5rem;
+  font-size: clamp(0.88rem, 1.1vw, 1rem);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.role-tag {
+  align-self: flex-start;
+  padding: 0.18rem 0.7rem;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.tone-gpu {
+  background: linear-gradient(180deg, var(--gpu-soft), transparent 80%), var(--surface);
+}
+
+.tone-urgent {
+  background: linear-gradient(180deg, var(--urgent-soft), transparent 80%), var(--surface);
+}
+
+.tone-regular {
+  background: linear-gradient(180deg, var(--regular-soft), transparent 80%), var(--surface);
+}
+
+.tone-gpu .role-tag,
+.tone-gpu .flow-num {
+  background: var(--gpu-soft);
+  color: var(--gpu);
+}
+
+.tone-urgent .flow-num {
+  background: var(--urgent-soft);
+  color: var(--urgent);
+}
+
+.tone-regular .flow-num {
+  background: var(--regular-soft);
+  color: var(--regular);
+}
+
+/* ===== Step flow (real sequences only) ===== */
+.flow {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: clamp(1.4rem, 2.4vw, 2rem);
+  list-style: none;
+}
+
+.flow-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.flow-step {
+  position: relative;
+}
+
+.flow-step:not(:last-child)::after {
+  content: "→";
+  position: absolute;
+  top: 50%;
+  right: calc(-1 * clamp(1.4rem, 2.4vw, 2rem));
+  width: clamp(1.4rem, 2.4vw, 2rem);
+  transform: translateY(-50%);
+  text-align: center;
+  font-size: 1.1rem;
+  color: var(--text-3);
+}
+
+.flow-num {
+  display: grid;
+  place-items: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+/* ===== Before / after ===== */
+.compare {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: clamp(0.75rem, 1.4vw, 1.1rem);
+}
+
+.compare-col {
+  gap: 0.9rem;
+}
+
+.compare-with {
+  background: linear-gradient(180deg, var(--gpu-soft), transparent 85%), var(--surface);
+}
+
+.compare-without h3 {
+  color: var(--text-2);
+}
+
+.compare-with h3 {
+  color: var(--gpu);
+}
+
+.compare-col ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  list-style: none;
+}
+
+.compare-col li {
+  position: relative;
+  padding-left: 1.9rem;
+  font-size: clamp(1rem, 1.4vw, 1.25rem);
+  line-height: 1.4;
+}
+
+.compare-col li::before {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-weight: 700;
+}
+
+.compare-without li {
+  color: var(--text-2);
+}
+
+.compare-without li::before {
+  content: "✕";
+  color: var(--danger);
+}
+
+.compare-with li::before {
+  content: "✓";
+  color: var(--gpu);
+}
+
+/* ===== Cover: the waiting line ===== */
+.queue-strip {
+  display: flex;
+  align-items: flex-end;
+  gap: clamp(0.75rem, 1.6vw, 1.5rem);
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+  padding: clamp(1rem, 1.8vw, 1.4rem);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  align-self: flex-start;
+}
+
+.queue-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.queue-group-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.queue-chips {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.chip {
+  padding: 0.55rem 1rem;
+  border-radius: var(--r-md);
+  font-size: clamp(0.9rem, 1.2vw, 1.05rem);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.chip.tone-regular {
+  background: var(--regular-soft);
+  color: var(--regular);
+}
+
+.chip.tone-urgent {
+  background: var(--urgent);
+  color: var(--on-accent);
+}
+
+.chip.chip-waiting {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--regular-line);
+}
+
+.queue-arrow {
+  padding-bottom: 0.5rem;
+  font-size: 1.4rem;
+  color: var(--text-3);
+}
+
+/* ===== Controls ===== */
+.deck-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.7rem var(--page-pad);
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+}
+
+.deck-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.deck-dots {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.deck-dot {
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--line-strong);
+  cursor: pointer;
+  transition: width 0.2s var(--ease), background 0.2s var(--ease);
+}
+
+.deck-dot:hover {
+  background: var(--text-3);
+}
+
+.deck-dot.active {
+  width: 28px;
+  background: var(--text);
+}
+
+.deck-counter {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.deck-hint {
+  font-size: 0.8rem;
+  color: var(--text-3);
+}
+
+/* ===== Smaller screens ===== */
+@media (max-width: 900px) {
+  .slides-body {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
+  .deck-stage {
+    place-items: start;
+  }
+
+  .slide-grid-2,
+  .slide-grid-3,
+  .flow,
+  .flow-3,
+  .compare {
+    grid-template-columns: 1fr;
+  }
+
+  .flow {
+    gap: 0.75rem;
+  }
+
+  .flow-step:not(:last-child)::after,
+  .deck-hint {
+    display: none;
+  }
+
+  .deck-controls {
+    position: sticky;
+    bottom: 0;
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+  }
+}

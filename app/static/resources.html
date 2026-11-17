@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta
+    name="description"
+    content="Deep-dive walkthrough of Kueue LocalQueue, ClusterQueue, WorkloadPriorityClass, ResourceFlavor, GKE ComputeClass, and PyTorch Job manifests."
+  />
+  <meta name="color-scheme" content="dark light" />
+  <title>Queue &amp; GKE Resources · GPU Job Scheduler Demo</title>
+  <!-- Google Fonts serves different CSS per browser, so an SRI hash can't be pinned here.
+       The CSP limits styles and fonts to these two origins. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&amp;family=Instrument+Sans:wght@400..700&amp;family=JetBrains+Mono:wght@400..700&amp;display=swap"
+  />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="/static/theme.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-brand">
+      <div>
+        <h1 class="brand-title">Queue &amp; GKE Resources</h1>
+        <p class="brand-subtitle">
+          How Kueue queues, priorities, flavors, and GKE ComputeClass fit together under the hood.
+        </p>
+      </div>
+      <nav class="page-nav" aria-label="Demo pages">
+        <a href="/slides" class="page-nav-link" id="nav-intro-slides">Intro slides</a>
+        <a href="/" class="page-nav-link" id="nav-live-demo">Live demo</a>
+        <a href="/resources" class="page-nav-link active" id="nav-queue-resources" aria-current="page">Queue resources</a>
+      </nav>
+    </div>
+
+    <div class="topbar-actions">
+      <div class="mode-pill" id="res-mode-indicator">
+        <span class="status-dot" id="res-mode-dot"></span>
+        <span id="res-mode-label">Simulation</span>
+      </div>
+      <button type="button" class="btn btn-ghost" id="btn-theme-toggle">Light theme</button>
+      <a href="/" class="btn btn-ghost" id="btn-back-demo">← Open live scheduler</a>
+    </div>
+  </header>
+
+  <div id="toast-banner" class="toast-banner hidden" role="status" aria-live="polite"></div>
+
+  <main class="resources-page">
+    <!-- LIVE STATUS SUMMARY STRIP -->
+    <section class="res-live-strip" aria-label="Live queue resource status">
+      <div class="res-stat-card">
+        <span class="res-stat-eyebrow">1 · Entry Queue (LocalQueue)</span>
+        <div class="res-stat-val">training-queue</div>
+        <div class="res-stat-sub" id="res-live-waiting">namespace: default · 0 waiting</div>
+      </div>
+      <div class="res-stat-card">
+        <span class="res-stat-eyebrow">2 · Quota Gate (ClusterQueue)</span>
+        <div class="res-stat-val" id="res-live-quota">0 / 4 GPU slices</div>
+        <div class="res-stat-sub">gpu-cluster-queue · preemption: Never</div>
+      </div>
+      <div class="res-stat-card">
+        <span class="res-stat-eyebrow">3 · Priority Tiers</span>
+        <div class="res-stat-val">1000 vs 100</div>
+        <div class="res-stat-sub">critical-priority skips low-priority</div>
+      </div>
+      <div class="res-stat-card">
+        <span class="res-stat-eyebrow">4 · Active GKE ComputeClass</span>
+        <div class="res-stat-val" id="res-live-gpu">NVIDIA L4</div>
+        <div class="res-stat-sub" id="res-live-tier">cheap-gpu-timeshared · score 20</div>
+      </div>
+    </section>
+
+    <!-- KUBERNETES CRD RELATIONSHIP DIAGRAM -->
+    <section class="res-map-panel" aria-labelledby="crd-map-heading">
+      <div class="res-map-header">
+        <div>
+          <h2 class="res-map-title" id="crd-map-heading">How the 6 Kubernetes resources bind together</h2>
+          <p class="res-map-sub">
+            Click any resource block below to jump straight to its key notes and YAML definition.
+          </p>
+        </div>
+        <span class="arch-hint-pill">k8s/01 · 02 · 03 manifests</span>
+      </div>
+
+      <div class="res-map-canvas">
+        <svg
+          class="arch-svg"
+          id="crd-binding-svg"
+          viewBox="0 0 1252 214"
+          role="img"
+          aria-labelledby="crd-svg-title crd-svg-desc"
+        >
+          <title id="crd-svg-title">Kueue and GKE Custom Resource Binding Chain</title>
+          <desc id="crd-svg-desc">
+            A batch/v1 Job references LocalQueue training-queue via label kueue.x-k8s.io/queue-name and selects a
+            WorkloadPriorityClass. LocalQueue points to ClusterQueue gpu-cluster-queue, which references ResourceFlavor
+            cheap-gpu-flavor, which binds pods via nodeLabels to GKE ComputeClass cheap-gpu-timeshared.
+          </desc>
+
+          <defs>
+            <marker id="res-arrow-cyan" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" class="arch-arrow-cyan" />
+            </marker>
+            <marker id="res-arrow-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" class="arch-arrow-amber" />
+            </marker>
+            <marker id="res-arrow-emerald" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" class="arch-arrow-emerald" />
+            </marker>
+          </defs>
+
+          <!-- NODE 1: batch/v1 Job -->
+          <g class="arch-stage-group" data-scroll-target="card-job" tabindex="0" role="button" aria-label="Jump to batch/v1 Job explanation">
+            <rect x="10" y="20" width="204" height="92" rx="7" class="arch-stage-box" />
+            <rect x="10" y="20" width="4" height="92" rx="2" class="arch-bar-amber" />
+            <text x="24" y="42" class="arch-stage-title arch-fill-amber">batch/v1 · Job</text>
+            <text x="24" y="61" class="arch-code arch-fill-primary">suspend: true</text>
+            <text x="24" y="79" class="arch-code">nvidia.com/gpu: "1"</text>
+            <text x="24" y="97" class="arch-muted">PyTorch (~25% GPU load)</text>
+          </g>
+
+          <!-- NODE 2: WorkloadPriorityClass (below Job, feeding into Job/ClusterQueue) -->
+          <g class="arch-stage-group" data-scroll-target="card-priority" tabindex="0" role="button" aria-label="Jump to WorkloadPriorityClass explanation">
+            <rect x="10" y="128" width="204" height="72" rx="7" class="arch-stage-box" />
+            <rect x="10" y="128" width="4" height="72" rx="2" class="arch-bar-amber" />
+            <text x="24" y="148" class="arch-stage-title">WorkloadPriorityClass</text>
+            <text x="24" y="167" class="arch-code arch-fill-amber">critical-priority: 1000</text>
+            <text x="24" y="185" class="arch-code arch-fill-cyan">low-priority: 100</text>
+          </g>
+
+          <!-- Wire: Job -> LocalQueue -->
+          <path d="M 214 66 L 274 66" class="arch-wire arch-wire-cyan" marker-end="url(#res-arrow-cyan)" />
+          <text x="244" y="56" text-anchor="middle" class="arch-wire-label">via label</text>
+
+          <!-- NODE 3: LocalQueue -->
+          <g class="arch-stage-group" data-scroll-target="card-localqueue" tabindex="0" role="button" aria-label="Jump to LocalQueue explanation">
+            <rect x="278" y="20" width="206" height="92" rx="7" class="arch-stage-box" />
+            <rect x="278" y="20" width="4" height="92" rx="2" class="arch-bar-cyan" />
+            <text x="292" y="42" class="arch-stage-title arch-fill-cyan">LocalQueue</text>
+            <text x="292" y="61" class="arch-code arch-fill-primary">training-queue</text>
+            <text x="292" y="79" class="arch-code">namespace: default</text>
+            <text x="292" y="97" class="arch-muted">Team-scoped entry point</text>
+          </g>
+
+          <!-- Wire: Priority -> ClusterQueue -->
+          <path d="M 214 164 L 548 164 L 548 154" class="arch-wire arch-wire-amber" marker-end="url(#res-arrow-amber)" />
+          <text x="380" y="156" text-anchor="middle" class="arch-wire-label arch-fill-amber">orders waiting queue (#1 VIP)</text>
+
+          <!-- Wire: LocalQueue -> ClusterQueue -->
+          <path d="M 484 66 L 544 66" class="arch-wire arch-wire-cyan" marker-end="url(#res-arrow-cyan)" />
+          <text x="514" y="56" text-anchor="middle" class="arch-wire-label">points to</text>
+
+          <!-- NODE 4: ClusterQueue -->
+          <g class="arch-stage-group" data-scroll-target="card-clusterqueue" tabindex="0" role="button" aria-label="Jump to ClusterQueue explanation">
+            <rect x="548" y="20" width="232" height="130" rx="7" class="arch-stage-box" />
+            <rect x="548" y="20" width="4" height="130" rx="2" class="arch-bar-cyan" />
+            <text x="562" y="42" class="arch-stage-title arch-fill-cyan">ClusterQueue</text>
+            <text x="562" y="61" class="arch-code arch-fill-primary">gpu-cluster-queue</text>
+            <text x="562" y="80" class="arch-code arch-fill-emerald">preemption: Never</text>
+            <text x="562" y="99" class="arch-code">nominalQuota: 4 GPUs</text>
+            <text x="562" y="117" class="arch-code">16 vCPU · 64Gi memory</text>
+            <text x="562" y="135" class="arch-muted">BestEffortFIFO admission</text>
+          </g>
+
+          <!-- Wire: ClusterQueue -> ResourceFlavor -->
+          <path d="M 780 85 L 836 85" class="arch-wire arch-wire-emerald" marker-end="url(#res-arrow-emerald)" />
+          <text x="808" y="75" text-anchor="middle" class="arch-wire-label">flavor</text>
+
+          <!-- NODE 5: ResourceFlavor -->
+          <g class="arch-stage-group" data-scroll-target="card-flavor" tabindex="0" role="button" aria-label="Jump to ResourceFlavor explanation">
+            <rect x="840" y="20" width="178" height="130" rx="7" class="arch-stage-box" />
+            <text x="854" y="42" class="arch-stage-title">ResourceFlavor</text>
+            <text x="854" y="61" class="arch-code arch-fill-primary">cheap-gpu-flavor</text>
+            <text x="854" y="82" class="arch-muted">Injects onto pods:</text>
+            <text x="854" y="100" class="arch-code">nodeLabels +</text>
+            <text x="854" y="118" class="arch-code">GPU tolerations</text>
+            <text x="854" y="135" class="arch-muted">Kueue ↔ GKE bridge</text>
+          </g>
+
+          <!-- Wire: ResourceFlavor -> ComputeClass -->
+          <path d="M 1018 85 L 1068 85" class="arch-wire arch-wire-emerald" marker-end="url(#res-arrow-emerald)" />
+          <text x="1043" y="75" text-anchor="middle" class="arch-wire-label">selector</text>
+
+          <!-- NODE 6: GKE ComputeClass -->
+          <g class="arch-stage-group" data-scroll-target="card-computeclass" tabindex="0" role="button" aria-label="Jump to GKE ComputeClass explanation">
+            <rect x="1072" y="20" width="170" height="180" rx="7" class="arch-stage-box arch-stage-gpu-box" />
+            <text x="1084" y="42" class="arch-stage-title arch-fill-emerald">ComputeClass</text>
+            <text x="1084" y="60" class="arch-code arch-fill-primary">cheap-gpu-timeshared</text>
+            <rect x="1082" y="72" width="150" height="44" rx="5" class="arch-subcard arch-tier-active" />
+            <text x="1090" y="90" class="arch-code arch-fill-emerald">Score 20 · On-Demand</text>
+            <text x="1090" y="106" class="arch-muted">L4 or T4 (spot: false)</text>
+            <rect x="1082" y="122" width="150" height="44" rx="5" class="arch-subcard" />
+            <text x="1090" y="140" class="arch-code">Score 10 · Spot VM</text>
+            <text x="1090" y="156" class="arch-muted">L4 or T4 (spot: true)</text>
+            <text x="1084" y="186" class="arch-code arch-fill-emerald">TIME_SHARING: 4 / GPU</text>
+          </g>
+        </svg>
+      </div>
+    </section>
+
+    <!-- FILTER BAR -->
+    <section class="res-filter-bar" aria-label="Filter resources by layer">
+      <div class="res-filter-pills" role="tablist" aria-label="Resource categories">
+        <button type="button" class="res-filter-btn active" id="filter-all" data-category="all">
+          All resources (6)
+        </button>
+        <button type="button" class="res-filter-btn" id="filter-kueue" data-category="kueue">
+          Kueue queue &amp; policy (4)
+        </button>
+        <button type="button" class="res-filter-btn" id="filter-gke" data-category="gke">
+          GKE ComputeClass (1)
+        </button>
+        <button type="button" class="res-filter-btn" id="filter-job" data-category="job">
+          Workload Jobs (1)
+        </button>
+      </div>
+      <span class="res-file-tag">Source files: k8s/01-compute-class.yaml · k8s/02-kueue-config.yaml · k8s/03-job-templates.yaml</span>
+    </section>
+
+    <!-- RESOURCE CARDS STACK -->
+    <div class="res-cards-stack" id="res-cards-container">
+      <!-- 1. LocalQueue -->
+      <article class="res-card" id="card-localqueue" data-category="kueue">
+        <div class="res-card-header">
+          <div class="res-card-title-group">
+            <span class="res-kind-badge res-kind-kueue">Kueue · LocalQueue</span>
+            <h3 class="res-card-name">training-queue</h3>
+          </div>
+          <span class="res-file-tag">k8s/02-kueue-config.yaml · kueue.x-k8s.io/v1beta1</span>
+        </div>
+        <div class="res-card-body">
+          <div class="res-explain-col">
+            <div class="res-pitch-box pitch-cyan">
+              <span class="res-pitch-label">Why it matters</span>
+              <p class="res-pitch-text">
+                ML researchers and application teams never touch cluster-level GPU pools or node selectors directly.
+                They submit standard Kubernetes Jobs to their namespace's <strong>training-queue</strong>, giving
+                platform admins clean multi-tenant governance while keeping developer workflows simple.
+              </p>
+            </div>
+            <div class="res-fields-list">
+              <div class="res-field-item">
+                <span class="res-field-key">metadata.namespace: default</span>
+                <span class="res-field-desc">
+                  Namespace-scoped queue entry point. Different teams can each get their own LocalQueue pointing to a shared ClusterQueue.
+                </span>
+              </div>
+              <div class="res-field-item">
+                <span class="res-field-key">spec.clusterQueue: gpu-cluster-queue</span>
+                <span class="res-field-desc">
+                  Forwards submitted jobs into the cluster-wide quota pool that manages the 4 time-shared GPU seats.
+                </span>
+              </div>
+            </div>
+          </div>
+          <div class="res-yaml-col">
+            <div class="res-yaml-topbar">
+              <span class="res-yaml-label">LocalQueue manifest</span>
+              <button type="button" class="res-copy-btn" data-copy-target="yaml-localqueue" id="btn-copy-localqueue">Copy YAML</button>
+            </div>
+            <pre class="res-yaml-pre" id="yaml-localqueue">apiVersion: kueue.x-k8s.io/v1beta1
+kind: LocalQueue
+metadata:
+  name: training-queue
+  namespace: default
+spec:
+  clusterQueue: gpu-cluster-queue</pre>
+          </div>
+        </div>
+      </article>
+
+      <!-- 2. ClusterQueue -->
+      <article class="res-card" id="card-clusterqueue" data-category="kueue">
+        <div class="res-card-header">
+          <div class="res-card-title-group">
+            <span class="res-kind-badge res-kind-kueue">Kueue · ClusterQueue</span>
+            <h3 class="res-card-name">gpu-cluster-queue</h3>
+          </div>
+          <span class="res-file-tag">k8s/02-kueue-config.yaml · kueue.x-k8s.io/v1beta1</span>
+        </div>
+        <div class="res-card-body">
+          <div class="res-explain-col">
+            <div class="res-pitch-box pitch-cyan">
+              <span class="res-pitch-label">Why it matters</span>
+              <p class="res-pitch-text">
+                <strong>gpu-cluster-queue</strong> is the brain of our scheduling policy. It caps concurrent admissions
+                at <strong>4 GPU slices</strong> (matching 1 physical GPU with 4× time-sharing) and sets
+                <strong>preemption: Never</strong>—so a running research job is <em>never</em> killed mid-epoch, zero
+                GPU compute is wasted, and urgent jobs cleanly take the very next freed seat.
+              </p>
+            </div>
+            <div class="res-fields-list">
+              <div class="res-field-item">
+                <span class="res-field-key">spec.preemption.withinClusterQueue: Never</span>
+                <span class="res-field-desc">
+                  Guarantees non-preemptive scheduling. Running training runs finish naturally instead of losing uncheckpointed epochs.
+                </span>
+              </div>
+              <div class="res-field-item">
+                <span class="res-field-key">spec.queueingStrategy: BestEffortFIFO</span>
+                <span class="res-field-desc">
+                  Orders waiting jobs by WorkloadPriorityClass first, then arrival timestamp, without blocking smaller jobs if quota is available.
+                </span>
+              </div>
+              <div class="res-field-item">
+                <span class="res-field-key">nominalQuota: nvidia.com/gpu: 4 (16 cpu · 64Gi)</span>
+                <span class="res-field-desc">
+                  Matches the 4 time-shared GPU seats advertised by 1 physical L4 or T4 GPU node. Once 4 jobs run, job #5 waits in Kueue.
+                </span>
+              </div>
+            </div>
+          </div>
+          <div class="res-yaml-col">
+            <div class="res-yaml-topbar">
+              <span class="res-yaml-label">ClusterQueue manifest</span>
+              <button type="button" class="res-copy-btn" data-copy-target="yaml-clusterqueue" id="btn-copy-clusterqueue">Copy YAML</button>
+            </div>
+            <pre class="res-yaml-pre" id="yaml-clusterqueue">apiVersion: kueue.x-k8s.io/v1beta1
+kind: ClusterQueue
+metadata:
+  name: gpu-cluster-queue
+spec:
+  namespaceSelector: {}
+  queueingStrategy: BestEffortFIFO
+  preemption:
+    withinClusterQueue: Never
+    reclaimWithinCohort: Never
+  resourceGroups:
+    - coveredResources: ["cpu", "memory", "nvidia.com/gpu"]
+      flavors:
+        - name: cheap-gpu-flavor
+          resources:
+            - name: "cpu"
+              nominalQuota: 16
+            - name: "memory"
+              nominalQuota: 64Gi
+            - name: "nvidia.com/gpu"
+              nominalQuota: 4</pre>
+          </div>
+        </div>
+      </article>
+
+      <!-- 3. WorkloadPriorityClass -->
+      <article class="res-card" id="card-priority" data-category="kueue">
+        <div class="res-card-header">
+          <div class="res-card-title-group">
+            <span class="res-kind-badge res-kind-kueue">Kueue · WorkloadPriorityClass</span>
+            <h3 class="res-card-name">critical-priority (1000) &amp; low-priority (100)</h3>
+          </div>
+          <span class="res-file-tag">k8s/02-kueue-config.yaml · kueue.x-k8s.io/v1beta1</span>
+        </div>
+        <div class="res-card-body">
+          <div class="res-explain-col">
+            <div class="res-pitch-box pitch-amber">
+              <span class="res-pitch-label">Why it matters</span>
+              <p class="res-pitch-text">
+                Why use Kueue's <strong>WorkloadPriorityClass</strong> instead of standard Kubernetes Pod PriorityClass?
+                Standard Pod PriorityClass triggers Kubelet pod eviction on nodes. Kueue's
+                <strong>WorkloadPriorityClass</strong> controls <em>queue order only</em>—so urgent production retraining
+                (<code>1000</code>) jumps straight to <strong>#1 in the waiting line</strong> ahead of research jobs
+                (<code>100</code>) without evicting running pods!
+              </p>
+            </div>
+            <div class="res-fields-list">
+              <div class="res-field-item">
+                <span class="res-field-key">critical-priority → value: 1000</span>
+                <span class="res-field-desc">
+                  Assigned to urgent production retraining jobs via label <code>kueue.x-k8s.io/priority-class: critical-priority</code>.
+                </span>
+              </div>
+              <div class="res-field-item">
+                <span class="res-field-key">low-priority → value: 100</span>
+                <span class="res-field-desc">
+                  Assigned to batch hyperparameter sweeps and research jobs so they fill spare GPU seats opportunistically.
+                </span>
+              </div>
+            </div>
+          </div>
+          <div class="res-yaml-col">
+            <div class="res-yaml-topbar">
+              <span class="res-yaml-label">WorkloadPriorityClass manifests</span>
+              <button type="button" class="res-copy-btn" data-copy-target="yaml-priority" id="btn-copy-priority">Copy YAML</button>
+            </div>
+            <pre class="res-yaml-pre" id="yaml-priority">apiVersion: kueue.x-k8s.io/v1beta1
+kind: WorkloadPriorityClass
+metadata:
+  name: critical-priority
+value: 1000
+description: "Critical production small-model retraining. Jumps to the front of the Kueue waiting queue."
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: WorkloadPriorityClass
+metadata:
+  name: low-priority
+value: 100
+description: "Low-priority batch hyperparameter sweeps and experimental small-model training."</pre>
+          </div>
+        </div>
+      </article>
+
+      <!-- 4. ResourceFlavor -->
+      <article class="res-card" id="card-flavor" data-category="kueue">
+        <div class="res-card-header">
+          <div class="res-card-title-group">
+            <span class="res-kind-badge res-kind-kueue">Kueue · ResourceFlavor</span>
+            <h3 class="res-card-name">cheap-gpu-flavor</h3>
+          </div>
+          <span class="res-file-tag">k8s/02-kueue-config.yaml · kueue.x-k8s.io/v1beta1</span>
+        </div>
+        <div class="res-card-body">
+          <div class="res-explain-col">
+            <div class="res-pitch-box pitch-cyan">
+              <span class="res-pitch-label">Why it matters</span>
+              <p class="res-pitch-text">
+                <strong>ResourceFlavor</strong> bridges Kueue's quota accounting with GKE's hardware provisioning. When
+                Kueue admits a job from <code>gpu-cluster-queue</code>, this flavor automatically stamps the pod with
+                the <code>cheap-gpu-timeshared</code> node label and GPU taint tolerations so GKE provisions the exact
+                right GPU machine.
+              </p>
+            </div>
+            <div class="res-fields-list">
+              <div class="res-field-item">
+                <span class="res-field-key">spec.nodeLabels["cloud.google.com/compute-class"]</span>
+                <span class="res-field-desc">
+                  Binds admitted pods to GKE's <code>cheap-gpu-timeshared</code> Custom ComputeClass.
+                </span>
+              </div>
+              <div class="res-field-item">
+                <span class="res-field-key">spec.tolerations (compute-class &amp; nvidia.com/gpu)</span>
+                <span class="res-field-desc">
+                  Lets admitted GPU jobs schedule onto tainted GPU nodes while preventing non-GPU workloads from landing on GPU VMs.
+                </span>
+              </div>
+            </div>
+          </div>
+          <div class="res-yaml-col">
+            <div class="res-yaml-topbar">
+              <span class="res-yaml-label">ResourceFlavor manifest</span>
+              <button type="button" class="res-copy-btn" data-copy-target="yaml-flavor" id="btn-copy-flavor">Copy YAML</button>
+            </div>
+            <pre class="res-yaml-pre" id="yaml-flavor">apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: cheap-gpu-flavor
+spec:
+  nodeLabels:
+    cloud.google.com/compute-class: cheap-gpu-timeshared
+  tolerations:
+    - key: cloud.google.com/compute-class
+      operator: Equal
+      value: cheap-gpu-timeshared
+      effect: NoSchedule
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule</pre>
+          </div>
+        </div>
+      </article>
+
+      <!-- 5. GKE ComputeClass -->
+      <article class="res-card" id="card-computeclass" data-category="gke">
+        <div class="res-card-header">
+          <div class="res-card-title-group">
+            <span class="res-kind-badge res-kind-gke">GKE · ComputeClass</span>
+            <h3 class="res-card-name">cheap-gpu-timeshared</h3>
+          </div>
+          <span class="res-file-tag">k8s/01-compute-class.yaml · cloud.google.com/v1</span>
+        </div>
+        <div class="res-card-body">
+          <div class="res-explain-col">
+            <div class="res-pitch-box">
+              <span class="res-pitch-label">Why it matters</span>
+              <p class="res-pitch-text">
+                Instead of hardcoding one GPU SKU and getting stuck during regional stockouts in Singapore
+                (<code>asia-southeast1</code>), GKE's <strong>ComputeClass</strong> evaluates On-Demand
+                <strong>NVIDIA L4 and T4 together</strong> at <code>priorityScore: 20</code>, automatically falls back
+                to <strong>Spot L4/T4</strong> at <code>priorityScore: 10</code>, and enables
+                <strong>4× GPU Time-Sharing</strong> so 4 small models share 1 cheap physical GPU!
+              </p>
+            </div>
+            <div class="res-fields-list">
+              <div class="res-field-item">
+                <span class="res-field-key">nodePoolAutoCreation.enabled: true</span>
+                <span class="res-field-desc">
+                  GKE automatically creates and scales node pools matching these rules, and scales idle GPU nodes back to zero.
+                </span>
+              </div>
+              <div class="res-field-item">
+                <span class="res-field-key">priorityScore: 20 (spot: false) → priorityScore: 10 (spot: true)</span>
+                <span class="res-field-desc">
+                  Grouping L4 and T4 at the same score lets GKE pick whichever GPU has immediate capacity in the region before falling back to Spot.
+                </span>
+              </div>
+              <div class="res-field-item">
+                <span class="res-field-key">gpuSharing: TIME_SHARING (maxSharedClientsPerGPU: 4)</span>
+                <span class="res-field-desc">
+                  Makes the node advertise <code>4 nvidia.com/gpu</code> allocatable units so 4 small PyTorch jobs (~25% load each) drive utilization near 100%.
+                </span>
+              </div>
+            </div>
+          </div>
+          <div class="res-yaml-col">
+            <div class="res-yaml-topbar">
+              <span class="res-yaml-label">ComputeClass manifest</span>
+              <button type="button" class="res-copy-btn" data-copy-target="yaml-computeclass" id="btn-copy-computeclass">Copy YAML</button>
+            </div>
+            <pre class="res-yaml-pre" id="yaml-computeclass">apiVersion: cloud.google.com/v1
+kind: ComputeClass
+metadata:
+  name: cheap-gpu-timeshared
+spec:
+  nodePoolAutoCreation:
+    enabled: true
+  whenUnsatisfiable: DoNotScaleUp
+  priorities:
+    # Tier 1: On-Demand L4 &amp; T4 evaluated together (score 20)
+    - gpu:
+        type: nvidia-l4
+        count: 1
+        driverVersion: default
+        gpuSharing:
+          sharingStrategy: TIME_SHARING
+          maxSharedClientsPerGPU: 4
+      spot: false
+      priorityScore: 20
+    - gpu:
+        type: nvidia-tesla-t4
+        count: 1
+        driverVersion: default
+        gpuSharing:
+          sharingStrategy: TIME_SHARING
+          maxSharedClientsPerGPU: 4
+      spot: false
+      priorityScore: 20
+    # Tier 2: Spot L4 &amp; T4 fallback (score 10)
+    - gpu:
+        type: nvidia-l4
+        count: 1
+        driverVersion: default
+        gpuSharing:
+          sharingStrategy: TIME_SHARING
+          maxSharedClientsPerGPU: 4
+      spot: true
+      priorityScore: 10
+    - gpu:
+        type: nvidia-tesla-t4
+        count: 1
+        driverVersion: default
+        gpuSharing:
+          sharingStrategy: TIME_SHARING
+          maxSharedClientsPerGPU: 4
+      spot: true
+      priorityScore: 10</pre>
+          </div>
+        </div>
+      </article>
+
+      <!-- 6. Kubernetes Job -->
+      <article class="res-card" id="card-job" data-category="job">
+        <div class="res-card-header">
+          <div class="res-card-title-group">
+            <span class="res-kind-badge res-kind-job">batch/v1 · Job</span>
+            <h3 class="res-card-name">critical-retrain-* &amp; batch-sweep-*</h3>
+          </div>
+          <span class="res-file-tag">k8s/03-job-templates.yaml · batch/v1</span>
+        </div>
+        <div class="res-card-body">
+          <div class="res-explain-col">
+            <div class="res-pitch-box pitch-amber">
+              <span class="res-pitch-label">Why it matters</span>
+              <p class="res-pitch-text">
+                Adopting Kueue requires almost zero changes to existing training code: it is a normal Kubernetes
+                <code>batch/v1 Job</code> with <code>suspend: true</code> and two labels. Kueue keeps the job suspended
+                while queued, then flips <code>suspend: false</code> the instant a GPU slice frees up.
+              </p>
+            </div>
+            <div class="res-fields-list">
+              <div class="res-field-item">
+                <span class="res-field-key">spec.suspend: true</span>
+                <span class="res-field-desc">
+                  Tells Kubernetes not to create pods immediately—Kueue unsuspends the Job only after admitting it against ClusterQueue quota.
+                </span>
+              </div>
+              <div class="res-field-item">
+                <span class="res-field-key">labels["kueue.x-k8s.io/queue-name" &amp; "priority-class"]</span>
+                <span class="res-field-desc">
+                  Routes the job to <code>training-queue</code> and tags it as <code>critical-priority</code> (1000) or <code>low-priority</code> (100).
+                </span>
+              </div>
+              <div class="res-field-item">
+                <span class="res-field-key">resources.requests["nvidia.com/gpu"]: "1"</span>
+                <span class="res-field-desc">
+                  Requests 1 of the 4 time-shared GPU seats on the node; Kubernetes still enforces full container CPU/memory isolation.
+                </span>
+              </div>
+            </div>
+          </div>
+          <div class="res-yaml-col">
+            <div class="res-yaml-topbar">
+              <span class="res-yaml-label">Urgent Job template (excerpt)</span>
+              <button type="button" class="res-copy-btn" data-copy-target="yaml-job" id="btn-copy-job">Copy YAML</button>
+            </div>
+            <pre class="res-yaml-pre" id="yaml-job">apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: critical-retrain-
+  namespace: default
+  labels:
+    kueue.x-k8s.io/queue-name: training-queue
+    kueue.x-k8s.io/priority-class: critical-priority
+spec:
+  suspend: true
+  parallelism: 1
+  completions: 1
+  template:
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        cloud.google.com/compute-class: cheap-gpu-timeshared
+      containers:
+        - name: trainer
+          image: pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "2Gi"
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "1"
+              memory: "4Gi"
+              nvidia.com/gpu: "1"</pre>
+          </div>
+        </div>
+      </article>
+    </div>
+
+    <!-- LIVE DEMO KUBECTL COMMANDS CHEAT SHEET -->
+    <section class="res-cli-panel" aria-labelledby="cli-heading">
+      <div>
+        <h2 class="res-map-title" id="cli-heading">Useful kubectl commands for live cluster inspection</h2>
+        <p class="res-map-sub">
+          To inspect Kueue or GKE objects directly from the terminal, copy any command below.
+        </p>
+      </div>
+      <div class="res-cli-grid">
+        <div class="res-cli-item">
+          <div class="res-cli-meta">
+            <span class="res-cli-caption">Inspect ClusterQueue quota &amp; pending workloads</span>
+            <code class="res-cli-cmd" id="cli-cmd-1">kubectl get clusterqueue gpu-cluster-queue -o wide</code>
+          </div>
+          <button type="button" class="res-copy-btn" data-copy-target="cli-cmd-1" id="btn-copy-cli-1">Copy</button>
+        </div>
+        <div class="res-cli-item">
+          <div class="res-cli-meta">
+            <span class="res-cli-caption">Watch Kueue Workloads queue order &amp; priority live</span>
+            <code class="res-cli-cmd" id="cli-cmd-2">kubectl get workloads -n default -w</code>
+          </div>
+          <button type="button" class="res-copy-btn" data-copy-target="cli-cmd-2" id="btn-copy-cli-2">Copy</button>
+        </div>
+        <div class="res-cli-item">
+          <div class="res-cli-meta">
+            <span class="res-cli-caption">Verify GKE ComputeClass L4/T4 rules &amp; time-sharing</span>
+            <code class="res-cli-cmd" id="cli-cmd-3">kubectl describe computeclass cheap-gpu-timeshared</code>
+          </div>
+          <button type="button" class="res-copy-btn" data-copy-target="cli-cmd-3" id="btn-copy-cli-3">Copy</button>
+        </div>
+        <div class="res-cli-item">
+          <div class="res-cli-meta">
+            <span class="res-cli-caption">Confirm 1 physical GPU exposes 4 allocatable GPU slices</span>
+            <code class="res-cli-cmd" id="cli-cmd-4">kubectl get nodes -l cloud.google.com/compute-class=cheap-gpu-timeshared -o custom-columns=NODE:.metadata.name,GPU_SLICES:.status.allocatable.nvidia\.com/gpu</code>
+          </div>
+          <button type="button" class="res-copy-btn" data-copy-target="cli-cmd-4" id="btn-copy-cli-4">Copy</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/resources.js"></script>
+</body>
+</html>

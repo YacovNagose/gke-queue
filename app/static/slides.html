@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta
+    name="description"
+    content="A short slide intro to Kueue: what it is, the problem it solves on shared GPU clusters, and what the live demo shows."
+  />
+  <meta name="color-scheme" content="dark light" />
+  <title>What is Kueue? · GPU Job Scheduler Demo</title>
+  <!-- Google Fonts serves different CSS per browser, so an SRI hash can't be pinned here.
+       The CSP limits styles and fonts to these two origins. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&amp;family=Instrument+Sans:wght@400..700&amp;family=JetBrains+Mono:wght@400..700&amp;display=swap"
+  />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/slides.css" />
+  <script src="/static/theme.js"></script>
+</head>
+<body class="slides-body">
+  <header class="topbar">
+    <div class="topbar-brand">
+      <div>
+        <h1 class="brand-title">What is Kueue?</h1>
+        <p class="brand-subtitle">A short intro to show before the live demo.</p>
+      </div>
+      <nav class="page-nav" aria-label="Demo pages">
+        <a href="/slides" class="page-nav-link active" id="nav-intro-slides" aria-current="page">Intro slides</a>
+        <a href="/" class="page-nav-link" id="nav-live-demo">Live demo</a>
+        <a href="/resources" class="page-nav-link" id="nav-queue-resources">Queue resources</a>
+      </nav>
+    </div>
+
+    <div class="topbar-actions">
+      <button type="button" class="btn btn-ghost" id="btn-theme-toggle">Light theme</button>
+      <button type="button" class="btn btn-ghost" id="btn-fullscreen">Full screen</button>
+    </div>
+  </header>
+
+  <main class="deck" id="deck">
+    <div class="deck-stage">
+      <!-- 1. Title -->
+      <section class="slide slide-cover" aria-labelledby="slide-1-title">
+        <p class="slide-kicker">Kueue · job queueing for Kubernetes</p>
+        <h2 class="slide-title slide-title-xl" id="slide-1-title">Who gets the GPU next?</h2>
+        <p class="slide-lead">
+          GPUs are scarce and expensive, and every team wants one now. Kueue gives a Kubernetes cluster
+          a waiting line with rules, so the answer is never "whoever submitted first".
+        </p>
+
+        <div class="queue-strip" role="img" aria-label="Four GPU seats in use, with one urgent job and two regular jobs waiting in line. The urgent job is first.">
+          <div class="queue-group">
+            <span class="queue-group-label">On the GPU now</span>
+            <div class="queue-chips">
+              <span class="chip tone-regular">Regular</span>
+              <span class="chip tone-regular">Regular</span>
+              <span class="chip tone-regular">Regular</span>
+              <span class="chip tone-regular">Regular</span>
+            </div>
+          </div>
+          <span class="queue-arrow" aria-hidden="true">←</span>
+          <div class="queue-group">
+            <span class="queue-group-label">Waiting line</span>
+            <div class="queue-chips">
+              <span class="chip tone-urgent">Urgent · next</span>
+              <span class="chip tone-regular chip-waiting">Regular</span>
+              <span class="chip tone-regular chip-waiting">Regular</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. The problem -->
+      <section class="slide" aria-labelledby="slide-2-title" hidden>
+        <p class="slide-kicker">The problem</p>
+        <h2 class="slide-title" id="slide-2-title">Kubernetes has no waiting line for jobs</h2>
+        <p class="slide-lead">
+          Kubernetes schedules pods one at a time. When a shared GPU cluster is full, four things go wrong.
+        </p>
+        <div class="slide-grid slide-grid-2">
+          <article class="slide-card">
+            <h3>Nobody can see the line</h3>
+            <p>A job that doesn't fit just has pods stuck in Pending. There is no list of who is next or how long the wait is.</p>
+          </article>
+          <article class="slide-card">
+            <h3>Quota says no, not "wait"</h3>
+            <p>ResourceQuota blocks new pods once a team is over its limit. It can't hold the job and start it later.</p>
+          </article>
+          <article class="slide-card">
+            <h3>Priority means eviction</h3>
+            <p>Pod priority gets urgent work in by evicting running pods. An evicted training run loses everything since its last checkpoint.</p>
+          </article>
+          <article class="slide-card">
+            <h3>Cost follows whoever submits most</h3>
+            <p>Every Pending pod can trigger a new GPU node. With no cap, a sweep of 50 experiments can ask for 50 GPUs.</p>
+          </article>
+        </div>
+      </section>
+
+      <!-- 3. What Kueue is -->
+      <section class="slide" aria-labelledby="slide-3-title" hidden>
+        <p class="slide-kicker">What Kueue is</p>
+        <h2 class="slide-title" id="slide-3-title">Kueue decides when a job starts</h2>
+        <p class="slide-lead">
+          Kueue is an open-source Kubernetes project (kubernetes-sigs) that adds a job queue and quotas
+          to a cluster. It works with the scheduler; it doesn't replace it.
+        </p>
+        <div class="slide-grid slide-grid-3">
+          <article class="slide-card tone-gpu">
+            <span class="role-tag">When</span>
+            <h3>Kueue</h3>
+            <p>Holds jobs in line and lets each one start when there is quota for it.</p>
+          </article>
+          <article class="slide-card">
+            <span class="role-tag">Where</span>
+            <h3>Kubernetes scheduler</h3>
+            <p>Places the pods of a started job onto nodes, exactly as it does today.</p>
+          </article>
+          <article class="slide-card">
+            <span class="role-tag">On what</span>
+            <h3>GKE ComputeClass</h3>
+            <p>Creates the right GPU nodes for those pods and removes them when they sit idle.</p>
+          </article>
+        </div>
+        <p class="slide-note">
+          Works with the job types teams already use: Kubernetes Job, JobSet, Kubeflow training jobs, Ray and more.
+        </p>
+      </section>
+
+      <!-- 4. How it works -->
+      <section class="slide" aria-labelledby="slide-4-title" hidden>
+        <p class="slide-kicker">How it works</p>
+        <h2 class="slide-title" id="slide-4-title">A job waits paused until there is room</h2>
+        <ol class="flow">
+          <li class="flow-step">
+            <span class="flow-num">1</span>
+            <h3>Submit</h3>
+            <p>A normal Kubernetes Job with one extra label naming the queue. It is created paused, so no pods and no nodes yet.</p>
+          </li>
+          <li class="flow-step">
+            <span class="flow-num">2</span>
+            <h3>Line up</h3>
+            <p>Kueue puts it in line: higher priority first, then first come, first served.</p>
+          </li>
+          <li class="flow-step">
+            <span class="flow-num">3</span>
+            <h3>Admit</h3>
+            <p>When quota is free, Kueue un-pauses the job and tells it which kind of hardware to run on.</p>
+          </li>
+          <li class="flow-step">
+            <span class="flow-num">4</span>
+            <h3>Run and release</h3>
+            <p>The job runs to the end. Its quota is freed and the next job in line starts.</p>
+          </li>
+        </ol>
+        <p class="slide-note">
+          The only change to an existing Job is the label <code>kueue.x-k8s.io/queue-name</code>. The training code stays the same.
+        </p>
+      </section>
+
+      <!-- 5. Building blocks -->
+      <section class="slide" aria-labelledby="slide-5-title" hidden>
+        <p class="slide-kicker">Building blocks</p>
+        <h2 class="slide-title" id="slide-5-title">Four objects describe the whole policy</h2>
+        <div class="slide-grid slide-grid-2">
+          <article class="slide-card">
+            <h3>LocalQueue</h3>
+            <p>The door a team submits to, inside its own namespace.</p>
+            <p class="card-here">In this demo: <code>training-queue</code></p>
+          </article>
+          <article class="slide-card">
+            <h3>ClusterQueue</h3>
+            <p>The shared pool and its limits: how much CPU, memory and GPU can be in use at once.</p>
+            <p class="card-here">In this demo: 4 GPU seats</p>
+          </article>
+          <article class="slide-card">
+            <h3>WorkloadPriorityClass</h3>
+            <p>Order in the line. It changes who goes next, not which running pods get evicted.</p>
+            <p class="card-here">In this demo: urgent 1000, regular 100</p>
+          </article>
+          <article class="slide-card">
+            <h3>ResourceFlavor</h3>
+            <p>The kind of hardware behind the quota, so admitted jobs land on the right nodes.</p>
+            <p class="card-here">In this demo: the L4 / T4 time-shared ComputeClass</p>
+          </article>
+        </div>
+        <p class="slide-note">
+          The YAML for each one, with detailed notes, is on the <a href="/resources" class="slide-link">Queue resources</a> page.
+        </p>
+      </section>
+
+      <!-- 6. Before and after -->
+      <section class="slide" aria-labelledby="slide-6-title" hidden>
+        <p class="slide-kicker">Before and after</p>
+        <h2 class="slide-title" id="slide-6-title">What changes on a shared GPU cluster</h2>
+        <div class="compare">
+          <div class="compare-col compare-without">
+            <h3>Without Kueue</h3>
+            <ul>
+              <li>Jobs that don't fit sit Pending, in no visible order</li>
+              <li>Urgent work waits its turn, or evicts running jobs</li>
+              <li>Teams compete for GPUs with no fair limit</li>
+              <li>GPU nodes scale with whatever gets submitted</li>
+            </ul>
+          </div>
+          <div class="compare-col compare-with">
+            <h3>With Kueue</h3>
+            <ul>
+              <li>One visible line: who is running and who is next</li>
+              <li>Urgent work goes to the front; running jobs can be left to finish</li>
+              <li>Each team or pool has a quota, and can lend what it isn't using</li>
+              <li>Only admitted jobs get nodes, so spend is capped by quota</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7. The demo -->
+      <section class="slide" aria-labelledby="slide-7-title" hidden>
+        <p class="slide-kicker">In this demo</p>
+        <h2 class="slide-title" id="slide-7-title">One GPU, four seats, and an urgent job</h2>
+        <p class="slide-lead">
+          A single low-cost GPU on GKE is time-shared by up to four small training jobs. Kueue manages the line for those four seats.
+        </p>
+        <ol class="flow flow-3">
+          <li class="flow-step tone-regular">
+            <span class="flow-num">1</span>
+            <h3>Send 6 regular jobs</h3>
+            <p>Four start on the shared GPU. Two wait in line.</p>
+          </li>
+          <li class="flow-step tone-urgent">
+            <span class="flow-num">2</span>
+            <h3>Send an urgent job</h3>
+            <p>It moves to first in line. Nothing that is running gets stopped.</p>
+          </li>
+          <li class="flow-step tone-gpu">
+            <span class="flow-num">3</span>
+            <h3>A seat frees up</h3>
+            <p>The urgent job takes it, ahead of the two regular jobs that were waiting longer.</p>
+          </li>
+        </ol>
+        <p class="slide-note">
+          Kueue can also stop lower-priority jobs to make room. This demo turns that off on purpose
+          (<code>preemption: Never</code>) so no training progress is lost.
+        </p>
+        <div class="slide-actions">
+          <a href="/" class="btn btn-primary" id="btn-start-demo">Start the live demo →</a>
+        </div>
+      </section>
+    </div>
+
+    <footer class="deck-controls" aria-label="Slide controls">
+      <button type="button" class="btn btn-ghost" id="btn-prev-slide">← Back</button>
+      <div class="deck-progress">
+        <div class="deck-dots" id="deck-dots"></div>
+        <span class="deck-counter" id="deck-counter" aria-live="polite">1 / 7</span>
+        <span class="deck-hint">Arrow keys to move · F for full screen</span>
+      </div>
+      <button type="button" class="btn btn-ghost" id="btn-next-slide">Next →</button>
+    </footer>
+  </main>
+
+  <script src="/static/slides.js"></script>
+</body>
+</html>

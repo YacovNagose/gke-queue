@@ -1,0 +1,20 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Local secrets / runtime files
+app/.csrf_secret
+.env
+.env.*
+*kubeconfig*
+*credentials*.json
+*.pem
+*.key
+*.log
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store

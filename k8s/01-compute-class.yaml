@@ -1,0 +1,59 @@
+apiVersion: cloud.google.com/v1
+kind: ComputeClass
+metadata:
+  name: cheap-gpu-timeshared
+spec:
+  # Automatically provision and scale node pools matching the priority rules below
+  nodePoolAutoCreation:
+    enabled: true
+  whenUnsatisfiable: DoNotScaleUp
+  priorities:
+    # =========================================================================
+    # TIER 1: ON-DEMAND GPUs (priorityScore: 20)
+    # Both L4 and T4 share priorityScore: 20 so GKE evaluates both On-Demand
+    # options concurrently and provisions whichever is fastest/available first.
+    # =========================================================================
+    - gpu:
+        type: nvidia-l4
+        count: 1
+        driverVersion: default
+        gpuSharing:
+          sharingStrategy: TIME_SHARING
+          maxSharedClientsPerGPU: 4
+      spot: false
+      priorityScore: 20
+
+    - gpu:
+        type: nvidia-tesla-t4
+        count: 1
+        driverVersion: default
+        gpuSharing:
+          sharingStrategy: TIME_SHARING
+          maxSharedClientsPerGPU: 4
+      spot: false
+      priorityScore: 20
+
+    # =========================================================================
+    # TIER 2: SPOT GPUs (priorityScore: 10)
+    # Fallback when On-Demand capacity is exhausted. Both L4 and T4 Spot rules
+    # share priorityScore: 10 to speed up Spot VM creation in asia-southeast1.
+    # =========================================================================
+    - gpu:
+        type: nvidia-l4
+        count: 1
+        driverVersion: default
+        gpuSharing:
+          sharingStrategy: TIME_SHARING
+          maxSharedClientsPerGPU: 4
+      spot: true
+      priorityScore: 10
+
+    - gpu:
+        type: nvidia-tesla-t4
+        count: 1
+        driverVersion: default
+        gpuSharing:
+          sharingStrategy: TIME_SHARING
+          maxSharedClientsPerGPU: 4
+      spot: true
+      priorityScore: 10
