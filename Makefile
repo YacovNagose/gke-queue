@@ -1,4 +1,4 @@
-.PHONY: help install run-ui setup-gke apply-k8s clean-jobs destroy-gke
+.PHONY: help install run-ui setup-gke deploy-ui port-forward-ui apply-k8s clean-jobs destroy-gke
 
 PYTHON ?= python3
 VENV_DIR ?= .venv
@@ -9,11 +9,13 @@ help:
 	@echo "=================================================================="
 	@echo " GKE + Kueue + Custom Compute Class (L4/T4 Time-Sharing) Demo"
 	@echo "=================================================================="
-	@echo "  make run-ui       - Install Python deps in .venv and start UI on http://127.0.0.1:8000"
-	@echo "  make setup-gke    - Provision GKE Standard (Dataplane V2, asia-southeast1) + Kueue + ComputeClass"
-	@echo "  make apply-k8s    - Apply ComputeClass and Kueue manifests to current kubectl context"
-	@echo "  make clean-jobs   - Delete all demo training jobs in the GKE cluster"
-	@echo "  make destroy-gke  - Tear down the GKE cluster in asia-southeast1"
+	@echo "  make run-ui          - Start UI locally on http://127.0.0.1:8000 (Simulation or local kubeconfig)"
+	@echo "  make setup-gke       - Provision GKE Standard (Dataplane V2, asia-southeast1) + Kueue + ComputeClass"
+	@echo "  make deploy-ui       - Build & deploy UI in-cluster with ServiceAccount/RBAC + ClusterIP Service"
+	@echo "  make port-forward-ui - Port-forward in-cluster svc/gke-queue-ui to http://127.0.0.1:8000"
+	@echo "  make apply-k8s       - Apply ComputeClass and Kueue manifests to current kubectl context"
+	@echo "  make clean-jobs      - Delete all demo training jobs in the GKE cluster"
+	@echo "  make destroy-gke     - Tear down the GKE cluster in asia-southeast1"
 
 install:
 	@if [ ! -d "$(VENV_DIR)" ]; then $(PYTHON) -m venv $(VENV_DIR); fi
@@ -27,6 +29,14 @@ run-ui: install
 setup-gke:
 	@chmod +x scripts/setup-gke-cluster.sh
 	@./scripts/setup-gke-cluster.sh
+
+deploy-ui:
+	@chmod +x scripts/deploy-ui.sh
+	@./scripts/deploy-ui.sh
+
+port-forward-ui:
+	@echo "Forwarding in-cluster UI to http://$(HOST):$(PORT) (Ctrl+C to stop)..."
+	kubectl port-forward svc/gke-queue-ui $(PORT):80 -n default --address $(HOST)
 
 apply-k8s:
 	kubectl apply -f k8s/01-compute-class.yaml

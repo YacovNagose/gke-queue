@@ -1106,7 +1106,7 @@ async def get_cluster_state() -> Dict[str, object]:
 @app.get("/api/manifests")
 async def get_manifests() -> Dict[str, str]:
     result: Dict[str, str] = {}
-    for fname in ("01-compute-class.yaml", "02-kueue-config.yaml", "03-job-templates.yaml"):
+    for fname in ("01-compute-class.yaml", "02-kueue-config.yaml", "03-job-templates.yaml", "04-ui-deployment.yaml"):
         fpath = (K8S_DIR / fname).resolve()
         if str(fpath).startswith(str(K8S_DIR.resolve()) + os.sep) and fpath.exists():
             result[fname] = fpath.read_text(encoding="utf-8")

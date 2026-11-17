@@ -35,7 +35,21 @@ Even in cloud clusters with autoscaling, GPUs are finite, quota-bound, and expen
 
 ## Quick Start
 
-### 1. Provision the GKE cluster in Singapore (`asia-southeast1`)
+### Option A: Try locally in 30 seconds (no GCP cluster required)
+
+You can explore the full scheduling flow, intro slides (`/slides`), and CRD reference (`/resources`) on your laptop using the built-in **Simulation Mode**:
+
+```bash
+make run-ui
+```
+
+Open **http://127.0.0.1:8000** in your browser. *(If your local `kubectl` is already connected to a configured GKE cluster, `make run-ui` also works directly against it.)*
+
+---
+
+### Option B: Run on GKE with In-Cluster UI Deployment
+
+#### 1. Provision the GKE cluster in Singapore (`asia-southeast1`)
 
 ```bash
 export PROJECT_ID="your-gcp-project-id"
@@ -50,19 +64,16 @@ This runs [`scripts/setup-gke-cluster.sh`](scripts/setup-gke-cluster.sh), which:
 
 Your project needs L4/T4 GPU quota in `asia-southeast1`.
 
-### 2. Run the demo UI
+#### 2. Deploy the UI in-cluster (`ServiceAccount` + RBAC + `ClusterIP`)
 
 ```bash
-make run-ui
+make deploy-ui
+make port-forward-ui
 ```
 
-Open **http://127.0.0.1:8000**. The UI connects to your current `kubectl` context automatically (live mode). Without a cluster it runs a built-in simulation; use the header button to switch.
-
-Running on a remote workstation? Forward the port from your laptop:
-
-```bash
-ssh -N -L 8000:localhost:8000 <your-workstation>
-```
+- [`scripts/deploy-ui.sh`](scripts/deploy-ui.sh) builds the container image with **Cloud Build** (no local Docker daemon needed), creates a random CSRF secret, and applies [`k8s/04-ui-deployment.yaml`](k8s/04-ui-deployment.yaml).
+- The UI runs under a dedicated Kubernetes `ServiceAccount` (`gke-queue-ui`) with **least-privilege RBAC** (`Role` for `jobs`, `pods`, `pods/log`, `pods/exec` in `default`, and read-only `ClusterRole` on `nodes`).
+- Because the UI can trigger GPU `Job` creation, it is exposed as an internal **`ClusterIP` `Service`** (rather than an unauthenticated public LoadBalancer) and accessed safely via IAM-authenticated `kubectl port-forward` at **http://127.0.0.1:8000**.
 
 ### 3. Demo flow
 
