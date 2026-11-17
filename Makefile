@@ -35,8 +35,12 @@ deploy-ui:
 	@./scripts/deploy-ui.sh
 
 port-forward-ui:
+	@$(PYTHON) -c 'import socket,sys; s=socket.socket(); busy=(s.connect_ex(("$(HOST)", $(PORT)))==0); s.close(); sys.exit("ERROR: $(HOST):$(PORT) is already in use. Stop it or run: make port-forward-ui PORT=8080") if busy else None'
 	@echo "Forwarding in-cluster UI to http://$(HOST):$(PORT) (Ctrl+C to stop)..."
-	kubectl port-forward svc/gke-queue-ui $(PORT):80 -n default --address $(HOST)
+	@trap 'exit 0' INT TERM; while true; do \
+		kubectl port-forward svc/gke-queue-ui $(PORT):80 -n default --address $(HOST) || true; \
+		sleep 1; \
+	done
 
 apply-k8s:
 	kubectl apply -f k8s/01-compute-class.yaml
