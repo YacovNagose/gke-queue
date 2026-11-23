@@ -45,22 +45,6 @@ Even in cloud clusters with autoscaling, GPUs are finite, quota-bound, and expen
 
 ---
 
-## Quick Start
-
-### Option A: Try locally in 30 seconds (no GCP cluster required)
-
-Explore the full scheduling flow, `/slides`, and `/resources` on your laptop using the built-in **Simulation Mode** (requires Python 3.10+):
-
-```bash
-make run-ui
-```
-
-Open **http://127.0.0.1:8000**. *(If your local `kubectl` is already connected to a configured GKE cluster, `make run-ui` also works directly against it; use the header button to toggle between Simulation and Live modes.)*
-
----
-
-### Option B: Run on GKE with In-Cluster UI Deployment
-
 **Prerequisites:** `gcloud`, `kubectl`, `gke-gcloud-auth-plugin`, Python 3, and L4/T4 GPU quota in your target region (defaults to `asia-southeast1`).
 
 #### 1. Provision the GKE cluster, Kueue, and `ComputeClass`
